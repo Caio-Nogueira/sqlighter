@@ -1,0 +1,15 @@
+/target
+# Compiled output
+/target/
+
+# Cargo.lock file
+Cargo.lock
+
+# Generated documentation
+/doc/
+
+# macOS specific files
+.DS_Store
+
+# Windows specific files
+Thumbs.db
