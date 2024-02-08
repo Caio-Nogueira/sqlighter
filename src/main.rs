@@ -1,6 +1,7 @@
 mod cli;
 mod sql;
 mod table;
+mod cursor;
 mod constants;
 use std::env;
 

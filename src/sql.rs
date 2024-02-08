@@ -97,7 +97,7 @@ pub fn execute_statement(statement: Statement, table: &mut Table) -> ExecuteResu
 pub fn execute_insert(statement: Statement, table: &mut Table)  -> ExecuteResult {
     let row = statement.row_to_insert;
 
-    match insert_row(table, row, table.num_rows) {
+    match insert_row(table, row) {
         Ok(_) => {
             println!("Inserted row with id: {}", row.id);
             ExecuteResult::ExecuteSuccess

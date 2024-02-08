@@ -1,5 +1,5 @@
 use std::{collections::HashMap, error::Error, fs::OpenOptions, io::{Read, Seek, Write}, path::Path};
-
+use crate::cursor::{Cursor, table_end, table_start, cursor_advance};
 use crate::constants;
 
 pub struct Pager {
@@ -55,7 +55,7 @@ impl Pager {
                 self.pages.insert(page_num, vec![0; constants::PAGE_SIZE as usize]);
             }
         }
-        
+
         self.pages.get_mut(&page_num)
     }
 
@@ -140,20 +140,12 @@ impl Table {
     }
 }
 
-pub fn row_slot(table: &mut Table, row_num: u32) -> Option<&mut [u8]> {
-    let page_no = row_num / constants::ROWS_PER_PAGE;
+pub fn cursor_value<'a>(cursor: &'a mut Cursor) -> Option<&'a mut [u8]> {
+    let page_no = cursor.row_num / constants::ROWS_PER_PAGE;
 
-    // if table.pager.pages.contains_key(&page_no) {
-    //     // page can already be cached
-    //     let page = table.pager.pages.get_mut(&page_no).unwrap();
-    //     let row_offset = row_num % constants::ROWS_PER_PAGE;
-    //     let start_index = row_offset as usize * constants::ROW_SIZE as usize;
-    //     let end_index = (row_offset + 1) as usize * constants::ROW_SIZE as usize;
-    //     Some(&mut page[start_index..end_index])
-    // } 
     
-     if let Some(page) = table.pager.get_page(page_no) {
-        let row_offset = row_num % constants::ROWS_PER_PAGE;
+    if let Some(page) = cursor.table.pager.get_page(page_no) {
+        let row_offset = cursor.row_num % constants::ROWS_PER_PAGE;
         let start_index = row_offset as usize * constants::ROW_SIZE as usize;
         let end_index = (row_offset + 1) as usize * constants::ROW_SIZE as usize;
         Some(&mut page[start_index..end_index])
@@ -164,8 +156,10 @@ pub fn row_slot(table: &mut Table, row_num: u32) -> Option<&mut [u8]> {
     }
 }
 
-pub fn insert_row(table: &mut Table, row: Row, row_num: u32) -> Result<(), Box<dyn Error>> {
-    match row_slot(table, row_num) {
+pub fn insert_row(table: &mut Table, row: Row) -> Result<(), Box<dyn Error>> {
+    let mut cursor = table_end(table);
+    
+    match cursor_value(&mut cursor) {
         Some(slot) => {
             serialize_row(&row, slot);
             table.num_rows += 1;
@@ -178,12 +172,20 @@ pub fn insert_row(table: &mut Table, row: Row, row_num: u32) -> Result<(), Box<d
 
 pub fn select_all_rows(table: &mut Table) -> Result<Vec<Row>, Box<dyn Error>> {
     let mut res: Vec<Row> = Vec::new();
-    
-    for i in 0..table.num_rows {
-        if let Some(slot) = row_slot(table, i) {
-            res.push(deserialize_row(&slot.try_into().unwrap())?);
+    let mut cursor = table_start(table);
+
+    while !cursor.end_of_table {
+        match cursor_value(&mut cursor) {
+            Some(slot) => {
+                
+                let row = deserialize_row(&slot[..292].try_into().unwrap())?;
+                res.push(row);
+            },
+            None => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to SELECT row"))),
         }
+        cursor_advance(&mut cursor);
     }
+    
 
     Ok(res)
 }
