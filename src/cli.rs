@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::io;
 
+use crate::table;
+
 pub struct InputBuffer {
     pub buffer: String,
 }
@@ -34,4 +36,10 @@ pub fn print_help() {
 pub fn print_prompt() {
     print!("db > ");
     io::stdout().flush().unwrap();
+}
+
+pub fn log_debug(table: &table::Table) {
+    println!("Num rows: {:?}", table.num_rows);
+    println!("Pager cache len: {:?}", table.pager.get_cache_size());
+    table.pager.log_cache(); 
 }

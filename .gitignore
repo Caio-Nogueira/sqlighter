@@ -13,3 +13,5 @@ Cargo.lock
 
 # Windows specific files
 Thumbs.db
+
+*.db

@@ -21,7 +21,7 @@ fn insert_row(table: &mut Table) -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn insert_and_select() {
-    let mut table = Table::new();
+    let mut table = Table::db_open("test.db".to_string());
     let mut statement = Statement {
         statement_type: StatementType::Insert,
         row_to_insert: Row::new(),
@@ -49,7 +49,7 @@ fn insert_max_rows() {
     // max pages = 100
     // max rows per page = 4096 / 292 = 14
     // max rows = 100 * 14 = 1400
-    let mut table = Table::new();
+    let mut table = Table::db_open("test.db".to_string());
     for _i in 0..1400 {
         insert_row(&mut table).unwrap();
     }
@@ -61,7 +61,7 @@ fn insert_max_rows() {
 
 #[test]
 fn insert_max_len_strings() {
-    let mut table = Table::new();
+    let mut table = Table::db_open("test.db".to_string());
     let mut statement = Statement {
         statement_type: StatementType::Insert,
         row_to_insert: Row::new(),
