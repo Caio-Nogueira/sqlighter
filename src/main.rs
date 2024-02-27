@@ -2,6 +2,8 @@ mod cli;
 mod sql;
 mod table;
 mod cursor;
+mod utils;
+mod btree;
 mod constants;
 use std::env;
 

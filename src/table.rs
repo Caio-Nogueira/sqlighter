@@ -1,11 +1,12 @@
 use std::{collections::HashMap, error::Error, fs::OpenOptions, io::{Read, Seek, Write}, path::Path};
-use crate::cursor::{Cursor, table_end, table_start, cursor_advance};
+use crate::{btree::{get_node, new_leaf, Node}, cursor::{cursor_advance, cursor_insert, cursor_value, table_end, table_start}, utils::{vec_to_page, Page}};
 use crate::constants;
 
 pub struct Pager {
     file: std::fs::File,
     file_length: u32,
-    pages: HashMap<u32, Vec<u8>>
+    num_pages: u32,
+    pub pages: HashMap<u32, Node>
 }
 
 impl Pager {
@@ -18,45 +19,44 @@ impl Pager {
             .unwrap();
 
         let file_length = file.metadata().unwrap().len() as u32;
+        if file_length % constants::PAGE_SIZE != 0 {
+            eprintln!("Db file is not a whole number of pages. Corrupt file.");
+            std::process::exit(1);
+        }
+
+        let num_pages = file_length / constants::PAGE_SIZE;
         Pager {
             file,
             file_length,
+            num_pages,
             pages: HashMap::new(), 
         }
     }
 
-    pub fn get_cache_size(&self) -> usize {
-        self.pages.len()
+    pub fn insert_page(&mut self, page: Node) -> Result<(), Box<dyn Error>> {
+        let page_num = self.num_pages;
+        self.pages.insert(page_num, page);
+        Ok(())
     }
 
-    pub fn log_cache(&self) {
-        for (page_num, page_data) in &self.pages {
-            println!("Page {}:", page_num);
-            for byte in page_data {
-                print!("{:02x} ", byte);
-            }
-            println!();
-        }
-    }
 
-    pub fn get_page(&mut self, page_num: u32) -> Option<&mut Vec<u8>> {
+    pub fn get_page(&mut self, page_num: u32) -> Result<&mut Node, Box<dyn Error>> {
         if page_num >= constants::TABLE_MAX_PAGES {
-            eprintln!("Tried to fetch page number out of bounds. {} > {}", page_num, constants::TABLE_MAX_PAGES);
-            return None;
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Tried to fetch page number out of bounds")))
         }
 
         if self.pages.contains_key(&page_num) {
-            return self.pages.get_mut(&page_num)
+            return Ok(self.pages.get_mut(&page_num).unwrap());
         }
 
         match self.load_page_from_disk(page_num) {
             Ok(_) => (),
             Err(_e) => {
-                self.pages.insert(page_num, vec![0; constants::PAGE_SIZE as usize]);
+                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Error loading page from disk. Probably fetching not existing page number.")));
             }
         }
 
-        self.pages.get_mut(&page_num)
+        Ok(self.pages.get_mut(&page_num).unwrap())
     }
 
     fn load_page_from_disk(&mut self, page_num: u32) -> Result<(), Box<dyn Error>> {
@@ -64,8 +64,9 @@ impl Pager {
         let offset = page_num * constants::PAGE_SIZE;
         self.file.seek(std::io::SeekFrom::Start(offset as u64))?;
         self.file.read_exact(&mut page_data)?;
+        let page = vec_to_page(page_data.as_mut());
         
-        self.pages.entry(page_num).or_insert(page_data);
+        self.pages.entry(page_num).or_insert(get_node(page)?);
     
         Ok(())
     }
@@ -75,7 +76,7 @@ impl Pager {
        for (page_num, page_data) in &self.pages {
             let offset = page_num * constants::PAGE_SIZE;
             self.file.seek(std::io::SeekFrom::Start(offset as u64))?;
-            self.file.write_all(&page_data)?;
+            self.file.write_all(&mut page_data.clone().to_page())?;
         }
 
         self.file.sync_all()?;
@@ -85,8 +86,8 @@ impl Pager {
 
 
 pub struct Table {
-    pub num_rows: u32,
     pub pager: Pager,
+    pub root_page_num: u32,
 }
 
 
@@ -114,8 +115,8 @@ pub fn serialize_row(source: &Row, dest: &mut [u8]) {
     dest[36..291].copy_from_slice(&source.email);
 }
 
-pub fn deserialize_row(source: &[u8; constants::ROW_SIZE as usize]) -> Result<Row, Box<dyn Error>> {
-    let id = u32::from_le_bytes(source[0..4].try_into().unwrap());
+pub fn deserialize_row(source: &[u8]) -> Result<Row, Box<dyn Error>> {
+    let id = u32::from_le_bytes(source[0..4].try_into()?);
     let mut username = [0; 32];
     username.copy_from_slice(&source[4..36]);
     let mut email = [0; 255];
@@ -126,11 +127,18 @@ pub fn deserialize_row(source: &[u8; constants::ROW_SIZE as usize]) -> Result<Ro
 
 impl Table {
     pub fn db_open(path: String) -> Table {
-        let pager = Pager::open(Path::new(&path));
-        let num_rows = pager.file_length / constants::ROW_SIZE;
+        let mut pager = Pager::open(Path::new(&path));
+        match pager.get_page(0) {
+            Ok(_) => (),
+            Err(_) => {
+                // New db file
+                let root_node = new_leaf();
+                pager.pages.insert(0, root_node);
+            }
+        }
         
         Table {
-            num_rows,
+            root_page_num: 0,
             pager 
         }
     }
@@ -138,47 +146,26 @@ impl Table {
     pub fn db_close(&mut self) {
         self.pager.flush().unwrap();
     }
-}
 
-pub fn cursor_value<'a>(cursor: &'a mut Cursor) -> Option<&'a mut [u8]> {
-    let page_no = cursor.row_num / constants::ROWS_PER_PAGE;
-
-    
-    if let Some(page) = cursor.table.pager.get_page(page_no) {
-        let row_offset = cursor.row_num % constants::ROWS_PER_PAGE;
-        let start_index = row_offset as usize * constants::ROW_SIZE as usize;
-        let end_index = (row_offset + 1) as usize * constants::ROW_SIZE as usize;
-        Some(&mut page[start_index..end_index])
-    }
-    
-    else {
-        None
-    }
 }
 
 pub fn insert_row(table: &mut Table, row: Row) -> Result<(), Box<dyn Error>> {
+    // TODO: Add btree insertion logic here
     let mut cursor = table_end(table);
-    
-    match cursor_value(&mut cursor) {
-        Some(slot) => {
-            serialize_row(&row, slot);
-            table.num_rows += 1;
-            Ok(())
-        },
-        None => Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to INSERT row"))),
-    }
+
+    cursor_insert(&mut cursor, row) 
 }
 
 
 pub fn select_all_rows(table: &mut Table) -> Result<Vec<Row>, Box<dyn Error>> {
     let mut res: Vec<Row> = Vec::new();
     let mut cursor = table_start(table);
-
+    //TODO: REFACTOR THIS -> bpage structure should be used to traverse the btree
     while !cursor.end_of_table {
         match cursor_value(&mut cursor) {
             Some(slot) => {
                 
-                let row = deserialize_row(&slot[..292].try_into().unwrap())?;
+                let row = deserialize_row(&slot.value[..constants::ROW_SIZE as usize])?;
                 res.push(row);
             },
             None => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to SELECT row"))),
@@ -186,6 +173,5 @@ pub fn select_all_rows(table: &mut Table) -> Result<Vec<Row>, Box<dyn Error>> {
         cursor_advance(&mut cursor);
     }
     
-
     Ok(res)
 }

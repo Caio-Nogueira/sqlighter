@@ -39,7 +39,5 @@ pub fn print_prompt() {
 }
 
 pub fn log_debug(table: &table::Table) {
-    println!("Num rows: {:?}", table.num_rows);
-    println!("Pager cache len: {:?}", table.pager.get_cache_size());
-    table.pager.log_cache(); 
+    println!("Num rows: {:?}", table.pager.pages.len());
 }
