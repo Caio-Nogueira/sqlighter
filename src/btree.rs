@@ -2,7 +2,7 @@ use std::error::Error;
 
 use crate::constants;
 use crate::table::{serialize_row, Row};
-use crate::utils::{generate_key, Page};
+use crate::utils::Page;
 
 #[derive(Debug, Clone)]
 pub struct Cell {
@@ -13,7 +13,7 @@ pub struct Cell {
 impl Cell {
     pub fn new(row: Row) -> Cell {
         let mut cell = Cell {
-            key: generate_key(),
+            key: row.id,
             value: [0; constants::ROW_SIZE as usize],
         };
         serialize_row(&row, cell.value.as_mut());
@@ -35,7 +35,7 @@ pub struct Node {
     pub content_len: u32, // num of cells / children, depending on node type
 }
 
-fn get_content_len(p: Page) -> u32 {
+pub fn get_content_len(p: Page) -> u32 {
     let mut content_len = [0u8; 4];
     content_len.copy_from_slice(&p[constants::NODE_CONTENT_LEN_OFFSET as usize..(constants::NODE_CONTENT_LEN_OFFSET + 4) as usize]);
     u32::from_ne_bytes(content_len)
@@ -82,9 +82,9 @@ fn get_parent(p: Page) -> u32 {
     u32::from_ne_bytes(parent)
 }
 
-fn set_parent(p: &mut Page, parent: u32) {
-    p[constants::NODE_PARENT_OFFSET as usize..(constants::NODE_PARENT_OFFSET + 4) as usize].copy_from_slice(&parent.to_ne_bytes());
-}
+// fn set_parent(p: &mut Page, parent: u32) {
+//     p[constants::NODE_PARENT_OFFSET as usize..(constants::NODE_PARENT_OFFSET + 4) as usize].copy_from_slice(&parent.to_ne_bytes());
+// }
 
 pub fn get_node(p: Page) -> Result<Node, Box<dyn Error>> {
     let node_type = get_node_type(p)?;
@@ -93,11 +93,6 @@ pub fn get_node(p: Page) -> Result<Node, Box<dyn Error>> {
         parent: get_parent(p),
         content_len: get_content_len(p),
     })
-}
-
-pub fn init_leaf_node(p: &mut Page) {
-    p[0] = 1;
-    set_content_len(p, 0);
 }
 
 impl Node {
@@ -126,7 +121,7 @@ impl Node {
         page
     }
 
-    pub fn insert_cell(&mut self, cell: Cell) {
+    pub fn insert_cell(&mut self, cell: Cell) -> Result<(), Box<dyn Error>> {
 
         match &mut self.node_type {
             NodeType::NodeInternal(children) => {
@@ -139,6 +134,7 @@ impl Node {
             },
         }
         self.content_len += 1;
+        Ok(())
     }
 
 }

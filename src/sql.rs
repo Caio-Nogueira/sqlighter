@@ -7,7 +7,7 @@ pub enum MetaCommandResult {
     MetaCommandUnrecognizedCommand(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum StatementType {
     Insert,
     Select,
@@ -26,11 +26,11 @@ pub enum PrepareResult{
 #[derive(Debug, PartialEq)]
 pub enum ExecuteResult {
     ExecuteSuccess,
-    ExecuteTableFull,
+    ExecuteFailure(String),
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Statement {
     pub statement_type: StatementType,
     pub row_to_insert: Row
@@ -102,7 +102,10 @@ pub fn execute_insert(statement: Statement, table: &mut Table)  -> ExecuteResult
             println!("Inserted row with id: {}", row.id);
             ExecuteResult::ExecuteSuccess
         }, 
-        Err(_) => ExecuteResult::ExecuteTableFull,
+        Err(err) => {
+            println!("Execute error");
+            ExecuteResult::ExecuteFailure(err.to_string())
+        } 
     }
     
 
@@ -116,7 +119,7 @@ pub fn execute_select(table: &mut Table) -> ExecuteResult {
             }
             ExecuteResult::ExecuteSuccess
         }, 
-        Err(_) => ExecuteResult::ExecuteTableFull,
+        Err(_) => ExecuteResult::ExecuteFailure("Error selecting rows".to_string()),
     }
     
 }

@@ -1,10 +1,10 @@
 use std::{collections::HashMap, error::Error, fs::OpenOptions, io::{Read, Seek, Write}, path::Path};
-use crate::{btree::{get_node, new_leaf, Node}, cursor::{cursor_advance, cursor_insert, cursor_value, table_end, table_start}, utils::{vec_to_page, Page}};
+use crate::{btree::{get_node, new_leaf, Node}, cursor::{cursor_advance, cursor_insert, cursor_value, table_find, table_start}, utils::vec_to_page};
 use crate::constants;
 
 pub struct Pager {
     file: std::fs::File,
-    file_length: u32,
+    // file_length: u32,
     num_pages: u32,
     pub pages: HashMap<u32, Node>
 }
@@ -27,7 +27,7 @@ impl Pager {
         let num_pages = file_length / constants::PAGE_SIZE;
         Pager {
             file,
-            file_length,
+            // file_length,
             num_pages,
             pages: HashMap::new(), 
         }
@@ -151,7 +151,7 @@ impl Table {
 
 pub fn insert_row(table: &mut Table, row: Row) -> Result<(), Box<dyn Error>> {
     // TODO: Add btree insertion logic here
-    let mut cursor = table_end(table);
+    let mut cursor = table_find(table, row.id)?;
 
     cursor_insert(&mut cursor, row) 
 }
