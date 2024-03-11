@@ -4,7 +4,6 @@ use crate::constants;
 
 pub struct Pager {
     file: std::fs::File,
-    // file_length: u32,
     num_pages: u32,
     pub pages: HashMap<u32, Node>
 }

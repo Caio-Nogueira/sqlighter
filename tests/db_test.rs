@@ -5,13 +5,13 @@ use sqlite_rs::constants::ROWS_PER_PAGE;
 use sqlite_rs::table::{Table, Row};
 use sqlite_rs::sql::{prepare_statement, execute_statement, PrepareResult, ExecuteResult, Statement, StatementType};
 
-fn insert_row(table: &mut Table) -> Result<(), Box<dyn Error>> {
+fn insert_row(table: &mut Table, key: u32) -> Result<(), Box<dyn Error>> {
     let mut statement = Statement {
         statement_type: StatementType::Insert,
         row_to_insert: Row::new(),
     };
-    let cmd = "insert 1 user1 user1@email.com";
-    let prepare_result = prepare_statement(cmd, &mut statement);
+    let cmd = format!("insert {} user1 user1@email.com", key);
+    let prepare_result = prepare_statement(cmd.as_str(), &mut statement);
     let execute_result = execute_statement(statement, table);
 
     if prepare_result == PrepareResult::PrepareSuccess && execute_result == ExecuteResult::ExecuteSuccess {
@@ -48,12 +48,10 @@ fn insert_and_select() {
 
 #[test]
 fn insert_max_rows() {
-    // max pages = 100
-    // max rows per page = 4096 / 292 = 14
-    // max rows = 100 * 14 = 1400
+
     let mut table = Table::db_open("test.db".to_string());
-    for _i in 0..ROWS_PER_PAGE {
-        insert_row(&mut table).unwrap();
+    for i in 0..ROWS_PER_PAGE {
+        insert_row(&mut table, i).unwrap();
     }
     let root = table.pager.get_page(0).unwrap();
     assert_eq!(get_content_len(root.clone().to_page()), ROWS_PER_PAGE);

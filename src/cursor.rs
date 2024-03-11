@@ -72,26 +72,19 @@ pub fn table_find(table: &mut Table, key: u32) -> Result<Cursor, Box<dyn Error>>
     match root.clone().node_type {
         NodeType::NodeLeaf(cells) => {
 
-            match binary_search_key(cells, key) {
-                Some(cell) => {
-                    cursor.cell_num = cell.key;
-                    if cell.key == key {
-                        eprintln!("Key already exists");
-                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Key already exists")));
-                    }
-                },
-                None => {
-                    //node is empty
-                    cursor.cell_num = 0;
-                }
+            let idx = binary_search_key(cells.clone(), key); 
+            cursor.cell_num = idx;
+            if idx < cells.len() as u32 && cells[idx as usize].key == key {
+                eprintln!("Key already exists");
+                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Key already exists")));
             }
             return Ok(cursor);
-
         },
         NodeType::NodeInternal(_) => unimplemented!("Internal nodes not implemented")
-    }
 
+    }
 }
+
 
 
 pub fn cursor_advance(cursor: &mut Cursor) {
@@ -110,5 +103,4 @@ pub fn cursor_insert(cursor: &mut Cursor, row: Row) -> Result<(), Box<dyn Error>
     let cell = Cell::new(row);
     let node = cursor_page(cursor)?;
     node.insert_cell(cell)
-
 }

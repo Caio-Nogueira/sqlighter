@@ -1,4 +1,5 @@
 
+
 use crate::{btree::Cell, constants};
 
 pub type Page = [u8; constants::PAGE_SIZE as usize];
@@ -9,17 +10,18 @@ pub fn vec_to_page(v: &mut [u8]) -> Page {
     page
 }
 
-pub fn binary_search_key(cells: Vec<Cell>, key: u32) -> Option<Cell>{
+pub fn binary_search_key(cells: Vec<Cell>, key: u32) -> u32 {
     if cells.is_empty() {
-        return None;
+        return 0;
     }
+    
     let mut left: usize = 0;
     let mut right: usize = cells.len() - 1; 
     while left <= right {
         let mid = (left + right) / 2;
         let mid_key = cells[mid as usize].key;
         if mid_key == key {
-            return Some(cells[mid].clone());
+            return mid as u32;
         }
         if mid_key < key {
             left = mid + 1;
@@ -27,5 +29,6 @@ pub fn binary_search_key(cells: Vec<Cell>, key: u32) -> Option<Cell>{
             right = mid - 1;
         }
     }
-    Some(cells[left].clone())
+
+    left as u32
 }
